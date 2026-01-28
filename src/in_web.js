@@ -260,8 +260,12 @@ function handleMouseDown( event ) {
 	// Only when actually playing, not during demo playback
 	if ( isMobile ) {
 
-		// Request fullscreen on first interaction
-		Touch_RequestFullscreen();
+		// Request fullscreen only when entering actual gameplay
+		if ( key_dest === key_game && ! cls.demoplayback ) {
+
+			Touch_RequestFullscreen();
+
+		}
 
 		if ( key_dest === key_game && ! cls.demoplayback && ! Touch_IsEnabled() ) {
 
@@ -358,8 +362,8 @@ function handleTouchStart( event ) {
 
 	if ( ! in_initialized ) return;
 
-	// On mobile, request fullscreen on first touch
-	if ( isMobile ) {
+	// On mobile, request fullscreen only when entering actual gameplay
+	if ( isMobile && key_dest === key_game && ! cls.demoplayback ) {
 
 		Touch_RequestFullscreen();
 
