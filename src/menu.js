@@ -965,7 +965,6 @@ function M_Options_Key( key ) {
 					break;
 				case 1:
 					m_state = m_none;
-					setKeyDest( key_console );
 					Con_ToggleConsole_f();
 					break;
 				case 2:
