@@ -226,7 +226,7 @@ Fetches a .pak file from a URL using fetch(), returns a Promise<pack_t>
 This is new for the browser version.
 =================
 */
-export async function COM_FetchPak( url, filename ) {
+export async function COM_FetchPak( url, filename, onProgress ) {
 
 	Sys_Printf( 'Fetching ' + url + '...\\n' );
 
@@ -238,7 +238,44 @@ export async function COM_FetchPak( url, filename ) {
 
 	}
 
-	const buffer = await response.arrayBuffer();
+	let buffer;
+	const contentLength = response.headers.get( 'content-length' );
+
+	if ( onProgress && contentLength && response.body ) {
+
+		const total = parseInt( contentLength, 10 );
+		const reader = response.body.getReader();
+		const chunks = [];
+		let received = 0;
+
+		while ( true ) {
+
+			const { done, value } = await reader.read();
+			if ( done ) break;
+
+			chunks.push( value );
+			received += value.length;
+			onProgress( received / total );
+
+		}
+
+		buffer = new ArrayBuffer( received );
+		const dest = new Uint8Array( buffer );
+		let offset = 0;
+		for ( const chunk of chunks ) {
+
+			dest.set( chunk, offset );
+			offset += chunk.length;
+
+		}
+
+	} else {
+
+		buffer = await response.arrayBuffer();
+		if ( onProgress ) onProgress( 1 );
+
+	}
+
 	Sys_Printf( 'Loaded ' + url + ' (' + buffer.byteLength + ' bytes)\\n' );
 
 	return COM_LoadPackFile( filename || url, buffer );

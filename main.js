@@ -26,9 +26,23 @@ async function main() {
 
 		COM_InitArgv( parms.argv );
 
+		// Loading bar
+		const loadingProgress = document.getElementById( 'loading-progress' );
+		const loadingOverlay = document.getElementById( 'loading' );
+
+		function setProgress( value ) {
+
+			if ( loadingProgress ) {
+
+				loadingProgress.style.width = ( value * 100 ) + '%';
+
+			}
+
+		}
+
 		// Load pak0.pak from the same directory
 		Sys_Printf( 'Loading pak0.pak...\\n' );
-		const pak0 = await COM_FetchPak( 'pak0.pak', 'pak0.pak' );
+		const pak0 = await COM_FetchPak( 'pak0.pak', 'pak0.pak', setProgress );
 		if ( pak0 ) {
 
 			COM_AddPack( pak0 );
@@ -58,6 +72,13 @@ async function main() {
 		}
 
 		await Host_Init( parms );
+
+		// Remove loading overlay
+		if ( loadingOverlay ) {
+
+			loadingOverlay.remove();
+
+		}
 
 		// Preload custom menu images
 		try {
