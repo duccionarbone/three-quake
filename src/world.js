@@ -22,7 +22,7 @@ import {
 	CONTENTS_CURRENT_0, CONTENTS_CURRENT_DOWN
 } from './bspfile.js';
 import { PR_ExecuteProgram } from './pr_exec.js';
-import { EDICT_TO_PROG, pr_global_struct } from './progs.js';
+import { EDICT_TO_PROG, PROG_TO_EDICT, pr_global_struct } from './progs.js';
 
 // Pre-allocated scratch vectors for SV_RecursiveHullCheck (indexed by recursion depth)
 // BSP hull trees are typically 20-30 levels deep max
@@ -898,7 +898,8 @@ function SV_ClipToLinks( node, clip ) {
 		if ( clip.passedict ) {
 
 			// don't clip against own missiles
-			if ( touch.v.owner && touch.v.owner === clip.passedict ) {
+			// owner field is an entity index, need PROG_TO_EDICT to get entity reference
+			if ( touch.v.owner !== 0 && PROG_TO_EDICT( touch.v.owner ) === clip.passedict ) {
 
 				l = next;
 				continue;
@@ -906,7 +907,7 @@ function SV_ClipToLinks( node, clip ) {
 			}
 
 			// don't clip against owner
-			if ( clip.passedict.v.owner && clip.passedict.v.owner === touch ) {
+			if ( clip.passedict.v.owner !== 0 && PROG_TO_EDICT( clip.passedict.v.owner ) === touch ) {
 
 				l = next;
 				continue;

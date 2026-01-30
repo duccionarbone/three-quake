@@ -24,7 +24,7 @@ import { Con_Init, Con_SetExternals } from './console.js';
 import { M_Init, M_SetExternals } from './menu.js';
 import { PR_Init } from './pr_edict.js';
 import { Mod_Init } from './gl_model.js';
-import { NET_Init, NET_Poll, NET_Shutdown } from './net_main.js';
+import { NET_Init, NET_Poll, NET_Shutdown, WT_QueryRooms, WT_CreateRoom } from './net_main.js';
 import { SV_Init, SV_SpawnServer, SV_SaveSpawnparms, SV_CheckForNewClients, SV_ClearDatagram, SV_SendClientMessages, SV_WriteClientdataToMessage, SV_DropClient } from './sv_main.js';
 import { SV_RunClients } from './sv_user.js';
 import { SV_Physics, SV_SetFrametime, FL_GODMODE, FL_NOTARGET,
@@ -196,7 +196,7 @@ function Host_FindMaxClients() {
 Host_InitCommands
 ======================
 */
-function Host_InitCommands() {
+export function Host_InitCommands() {
 
 	Cmd_AddCommand( 'status', Host_Status_f );
 	Cmd_AddCommand( 'quit', Host_Quit_f );
@@ -327,7 +327,9 @@ export async function Host_Init( parms ) {
 		IN_RequestPointerLock: IN_RequestPointerLock,
 		host_time_get: () => host_time,
 		realtime_get: () => realtime,
-		CL_NextDemo: CL_NextDemo
+		CL_NextDemo: CL_NextDemo,
+		WT_QueryRooms: WT_QueryRooms,
+		WT_CreateRoom: WT_CreateRoom
 	} );
 
 	SCR_Init();
@@ -558,6 +560,14 @@ function _Host_FilterTime( time ) {
 
 	realtime += time;
 
+	// Don't run too fast - cap at 72 FPS
+	// This prevents packets from flooding out and keeps physics consistent
+	if ( cls.timedemo !== true && realtime - oldrealtime < 1.0 / 72.0 )
+		return false; // framerate is too high
+
+	host_frametime = realtime - oldrealtime;
+	oldrealtime = realtime;
+
 	if ( host_framerate.value > 0 ) {
 
 		host_frametime = host_framerate.value;
@@ -565,7 +575,6 @@ function _Host_FilterTime( time ) {
 	} else {
 
 		// don't allow really long or short frames
-		host_frametime = realtime - oldrealtime;
 		if ( host_frametime > 0.1 )
 			host_frametime = 0.1;
 		if ( host_frametime < 0.001 )
@@ -573,7 +582,6 @@ function _Host_FilterTime( time ) {
 
 	}
 
-	oldrealtime = realtime;
 	return true;
 
 }
@@ -1153,6 +1161,9 @@ function Host_Spawn_f() {
 
 	}
 
+	const clientIdx = svs.clients.indexOf( host_client );
+	console.log( '[MP] Host_Spawn_f: client', clientIdx, host_client.name );
+
 	// run the entrance script
 	if ( sv.loadgame ) {
 
@@ -1189,6 +1200,9 @@ function Host_Spawn_f() {
 				Sys_Printf( '%s entered the game\n', host_client.name );
 
 			PR_ExecuteProgram( pr_global_struct.PutClientInServer );
+
+			// Log entity state after PutClientInServer
+			console.log( '[MP] After PutClientInServer: entity', clientIdx + 1, 'modelindex=', ent.v.modelindex );
 
 		}
 
@@ -1271,6 +1285,8 @@ function Host_Begin_f() {
 
 	}
 
+	const clientIdx = svs.clients.indexOf( host_client );
+	console.log( '[MP] Host_Begin_f: client', clientIdx, host_client.name, 'spawned=true' );
 	host_client.spawned = true;
 
 }

@@ -41,6 +41,8 @@ export const MOVETYPE_PUSH = 7;
 export const MOVETYPE_NOCLIP = 8;
 export const MOVETYPE_FLYMISSILE = 9;
 export const MOVETYPE_BOUNCE = 10;
+export const MOVETYPE_BOUNCEMISSILE = 11; // QUAKE2
+export const MOVETYPE_FOLLOW = 12; // QUAKE2 - stuck to aiment entity
 
 //
 // Solid type constants
@@ -180,6 +182,7 @@ export function SV_CheckAllEnts() {
 			continue;
 		if ( check.v.movetype === MOVETYPE_PUSH
 			|| check.v.movetype === MOVETYPE_NONE
+			|| check.v.movetype === MOVETYPE_FOLLOW
 			|| check.v.movetype === MOVETYPE_NOCLIP )
 			continue;
 
@@ -547,6 +550,152 @@ export function SV_PushEntity( ent, push ) {
 
 /*
 ============
+SV_PushRotate
+
+Handles rotating brush entities (doors, platforms with avelocity)
+QUAKE2 feature
+============
+*/
+export function SV_PushRotate( pusher, movetime ) {
+
+	const amove = new Float32Array( 3 );
+	const a = new Float32Array( 3 );
+	const pushorig = new Float32Array( 3 );
+	const entorig = new Float32Array( 3 );
+	const move = new Float32Array( 3 );
+	const org = new Float32Array( 3 );
+	const org2 = new Float32Array( 3 );
+	const forward = new Float32Array( 3 );
+	const right = new Float32Array( 3 );
+	const up = new Float32Array( 3 );
+	const moved_edict = new Array( MAX_EDICTS );
+	const moved_from = [];
+	for ( let i = 0; i < MAX_EDICTS; i ++ )
+		moved_from[ i ] = new Float32Array( 3 );
+
+	// If no angular velocity, just advance time
+	if ( pusher.v.avelocity[ 0 ] === 0 && pusher.v.avelocity[ 1 ] === 0 && pusher.v.avelocity[ 2 ] === 0 ) {
+
+		pusher.v.ltime += movetime;
+		return;
+
+	}
+
+	// Calculate angular movement
+	for ( let i = 0; i < 3; i ++ )
+		amove[ i ] = pusher.v.avelocity[ i ] * movetime;
+
+	// Build rotation matrix (negate for proper coordinate transform)
+	VectorSubtract( vec3_origin, amove, a );
+	AngleVectors( a, forward, right, up );
+
+	VectorCopy( pusher.v.angles, pushorig );
+
+	// Move the pusher to its final position
+	VectorAdd( pusher.v.angles, amove, pusher.v.angles );
+	pusher.v.ltime += movetime;
+	SV_LinkEdict( pusher, false );
+
+	// See if any solid entities are inside the final position
+	let num_moved = 0;
+	let check = NEXT_EDICT( sv.edicts[ 0 ] );
+	for ( let e = 1; e < sv.num_edicts; e ++, check = NEXT_EDICT( check ) ) {
+
+		if ( check.free )
+			continue;
+		if ( check.v.movetype === MOVETYPE_PUSH
+			|| check.v.movetype === MOVETYPE_NONE
+			|| check.v.movetype === MOVETYPE_FOLLOW
+			|| check.v.movetype === MOVETYPE_NOCLIP )
+			continue;
+
+		// If the entity is standing on the pusher, it will definitely be moved
+		if ( ! ( ( ( check.v.flags | 0 ) & FL_ONGROUND )
+			&& PROG_TO_EDICT( check.v.groundentity ) === pusher ) ) {
+
+			if ( check.v.absmin[ 0 ] >= pusher.v.absmax[ 0 ]
+				|| check.v.absmin[ 1 ] >= pusher.v.absmax[ 1 ]
+				|| check.v.absmin[ 2 ] >= pusher.v.absmax[ 2 ]
+				|| check.v.absmax[ 0 ] <= pusher.v.absmin[ 0 ]
+				|| check.v.absmax[ 1 ] <= pusher.v.absmin[ 1 ]
+				|| check.v.absmax[ 2 ] <= pusher.v.absmin[ 2 ] )
+				continue;
+
+			// See if the ent's bbox is inside the pusher's final position
+			if ( ! SV_TestEntityPosition( check ) )
+				continue;
+
+		}
+
+		// Remove the onground flag for non-players
+		if ( check.v.movetype !== MOVETYPE_WALK )
+			check.v.flags = ( check.v.flags | 0 ) & ~FL_ONGROUND;
+
+		VectorCopy( check.v.origin, entorig );
+		VectorCopy( check.v.origin, moved_from[ num_moved ] );
+		moved_edict[ num_moved ] = check;
+		num_moved ++;
+
+		// Calculate destination position by rotating around pusher origin
+		VectorSubtract( check.v.origin, pusher.v.origin, org );
+		org2[ 0 ] = DotProduct( org, forward );
+		org2[ 1 ] = - DotProduct( org, right );
+		org2[ 2 ] = DotProduct( org, up );
+		VectorSubtract( org2, org, move );
+
+		// Try moving the contacted entity
+		pusher.v.solid = SOLID_NOT;
+		SV_PushEntity( check, move );
+		pusher.v.solid = SOLID_BSP;
+
+		// If it is still inside the pusher, block
+		const block = SV_TestEntityPosition( check );
+		if ( block ) {
+
+			// Fail the move
+			if ( check.v.mins[ 0 ] === check.v.maxs[ 0 ] )
+				continue;
+			if ( check.v.solid === SOLID_NOT || check.v.solid === SOLID_TRIGGER ) {
+
+				// Corpse
+				check.v.mins[ 0 ] = check.v.mins[ 1 ] = 0;
+				VectorCopy( check.v.mins, check.v.maxs );
+				continue;
+
+			}
+
+			VectorCopy( entorig, check.v.origin );
+			SV_LinkEdict( check, true );
+
+			VectorCopy( pushorig, pusher.v.angles );
+			SV_LinkEdict( pusher, false );
+
+			// If the pusher has a "blocked" function, call it
+			if ( pusher.v.blocked ) {
+
+				pr_global_struct.self = EDICT_TO_PROG( pusher );
+				pr_global_struct.other = EDICT_TO_PROG( check );
+				PR_ExecuteProgram( pusher.v.blocked );
+
+			}
+
+			// Move back any entities we already moved
+			for ( let i = 0; i < num_moved; i ++ ) {
+
+				VectorCopy( moved_from[ i ], moved_edict[ i ].v.origin );
+				SV_LinkEdict( moved_edict[ i ], false );
+
+			}
+			return;
+
+		}
+
+	}
+
+}
+
+/*
+============
 SV_PushMove
 ============
 */
@@ -593,6 +742,7 @@ export function SV_PushMove( pusher, movetime ) {
 			continue;
 		if ( check.v.movetype === MOVETYPE_PUSH
 			|| check.v.movetype === MOVETYPE_NONE
+			|| check.v.movetype === MOVETYPE_FOLLOW
 			|| check.v.movetype === MOVETYPE_NOCLIP )
 			continue;
 
@@ -702,7 +852,11 @@ export function SV_Physics_Pusher( ent ) {
 
 	if ( movetime ) {
 
-		SV_PushMove( ent, movetime ); // advances ent.v.ltime if not blocked
+		// Check for angular velocity (rotating doors/platforms)
+		if ( ent.v.avelocity[ 0 ] !== 0 || ent.v.avelocity[ 1 ] !== 0 || ent.v.avelocity[ 2 ] !== 0 )
+			SV_PushRotate( ent, movetime );
+		else
+			SV_PushMove( ent, movetime ); // advances ent.v.ltime if not blocked
 
 	}
 
@@ -1111,6 +1265,30 @@ export function SV_Physics_None( ent ) {
 
 /*
 =============
+SV_Physics_Follow
+
+Entities that are "stuck" to another entity (QUAKE2 feature)
+=============
+*/
+export function SV_Physics_Follow( ent ) {
+
+	// regular thinking
+	SV_RunThink( ent );
+
+	// Follow the aiment: origin = aiment.origin + v_angle (v_angle used as offset)
+	const aiment = PROG_TO_EDICT( ent.v.aiment );
+	if ( aiment != null ) {
+
+		VectorAdd( aiment.v.origin, ent.v.v_angle, ent.v.origin );
+
+	}
+
+	SV_LinkEdict( ent, true );
+
+}
+
+/*
+=============
 SV_Physics_Noclip
 
 A moving object that doesn't obey physics
@@ -1336,12 +1514,15 @@ export function SV_Physics() {
 			SV_Physics_Pusher( ent );
 		else if ( ent.v.movetype === MOVETYPE_NONE )
 			SV_Physics_None( ent );
+		else if ( ent.v.movetype === MOVETYPE_FOLLOW )
+			SV_Physics_Follow( ent );
 		else if ( ent.v.movetype === MOVETYPE_NOCLIP )
 			SV_Physics_Noclip( ent );
 		else if ( ent.v.movetype === MOVETYPE_STEP )
 			SV_Physics_Step( ent );
 		else if ( ent.v.movetype === MOVETYPE_TOSS
 			|| ent.v.movetype === MOVETYPE_BOUNCE
+			|| ent.v.movetype === MOVETYPE_BOUNCEMISSILE
 			|| ent.v.movetype === MOVETYPE_FLY
 			|| ent.v.movetype === MOVETYPE_FLYMISSILE )
 			SV_Physics_Toss( ent );
