@@ -381,7 +381,7 @@ function CL_FinishTimeDemo() {
 	// the first frame didn't count
 	const frames = ( host_framecount - cls.td_startframe ) - 1;
 	let time = realtime - cls.td_starttime;
-	if ( ! time )
+	if ( time === 0 )
 		time = 1;
 	Con_Printf( '%i frames %5.1f seconds %5.1f fps\n', frames, time, frames / time );
 

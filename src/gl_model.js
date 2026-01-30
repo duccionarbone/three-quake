@@ -1050,7 +1050,7 @@ function readString( bytes, offset, maxLen ) {
 
 function Mod_LoadTextures( fileofs, filelen ) {
 
-	if ( ! filelen ) {
+	if ( filelen === 0 ) {
 
 		loadmodel.textures = null;
 		return;
@@ -1232,7 +1232,7 @@ function Mod_LoadTextures( fileofs, filelen ) {
 
 function Mod_LoadLighting( fileofs, filelen ) {
 
-	if ( ! filelen ) {
+	if ( filelen === 0 ) {
 
 		loadmodel.lightdata = null;
 		return;
@@ -1250,7 +1250,7 @@ function Mod_LoadLighting( fileofs, filelen ) {
 
 function Mod_LoadVisibility( fileofs, filelen ) {
 
-	if ( ! filelen ) {
+	if ( filelen === 0 ) {
 
 		loadmodel.visdata = null;
 		return;
@@ -1268,7 +1268,7 @@ function Mod_LoadVisibility( fileofs, filelen ) {
 
 function Mod_LoadEntities( fileofs, filelen ) {
 
-	if ( ! filelen ) {
+	if ( filelen === 0 ) {
 
 		loadmodel.entities = null;
 		return;

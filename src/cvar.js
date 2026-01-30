@@ -133,7 +133,7 @@ export function Cvar_CompleteVariable( partial ) {
 
 	const len = partial.length;
 
-	if ( ! len )
+	if ( len === 0 )
 		return null;
 
 	// check functions

@@ -107,11 +107,11 @@ export function PR_PrintStatement( s ) {
 
 	} else {
 
-		if ( s.a )
+		if ( s.a !== 0 )
 			line += PR_GlobalString( s.a );
-		if ( s.b )
+		if ( s.b !== 0 )
 			line += PR_GlobalString( s.b );
-		if ( s.c )
+		if ( s.c !== 0 )
 			line += PR_GlobalStringNoContents( s.c );
 
 	}
@@ -325,9 +325,9 @@ export function PR_ExecuteProgram( fnum ) {
 	let runaway;
 	let exitdepth;
 
-	if ( ! fnum || fnum >= progs.numfunctions ) {
+	if ( fnum === 0 || fnum >= progs.numfunctions ) {
 
-		if ( pr_global_struct.self )
+		if ( pr_global_struct.self !== 0 )
 			ED_Print( PROG_TO_EDICT( pr_global_struct.self ) );
 		throw new Error( 'PR_ExecuteProgram: NULL function' );
 

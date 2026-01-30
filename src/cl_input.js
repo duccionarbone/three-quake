@@ -69,9 +69,9 @@ function KeyDown( b ) {
 	if ( k === b.down[ 0 ] || k === b.down[ 1 ] )
 		return; // repeating key
 
-	if ( ! b.down[ 0 ] )
+	if ( b.down[ 0 ] === 0 )
 		b.down[ 0 ] = k;
-	else if ( ! b.down[ 1 ] )
+	else if ( b.down[ 1 ] === 0 )
 		b.down[ 1 ] = k;
 	else {
 

@@ -345,7 +345,7 @@ export function Con_Print( txt ) {
 
 		}
 
-		if ( ! con_x ) {
+		if ( con_x === 0 ) {
 
 			Con_Linefeed();
 			// mark time for transparent overlay

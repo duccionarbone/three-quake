@@ -161,13 +161,13 @@ export function S_PaintChannels( endtime ) {
 
 			const ch = channels[ i ];
 
-			if ( ! ch.sfx )
+			if ( ch.sfx == null )
 				continue;
-			if ( ! ch.leftvol && ! ch.rightvol )
+			if ( ch.leftvol === 0 && ch.rightvol === 0 )
 				continue;
 
 			const sc = S_LoadSound( ch.sfx );
-			if ( ! sc )
+			if ( sc == null )
 				continue;
 
 			let ltime = pt;

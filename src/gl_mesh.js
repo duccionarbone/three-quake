@@ -551,7 +551,7 @@ export function GL_DrawAliasFrame( paliashdr, posenum, shadedots, shadelight ) {
 		while ( true ) {
 
 			let count = cmds[ cmdIndex ++ ];
-			if ( ! count )
+			if ( count === 0 )
 				break;
 
 			const isStrip = count > 0;

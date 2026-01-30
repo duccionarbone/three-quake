@@ -178,14 +178,14 @@ export function Loop_GetMessage( sock ) {
 	const alignedLength = IntAlign( length + 4 );
 	sock.receiveMessageLength -= alignedLength;
 
-	if ( sock.receiveMessageLength ) {
+	if ( sock.receiveMessageLength > 0 ) {
 
 		// shift remaining data down
 		sock.receiveMessage.copyWithin( 0, alignedLength, alignedLength + sock.receiveMessageLength );
 
 	}
 
-	if ( sock.driverdata && ret === 1 )
+	if ( sock.driverdata != null && ret === 1 )
 		sock.driverdata.canSend = true;
 
 	return ret;
@@ -299,7 +299,7 @@ Loop_Close
 */
 export function Loop_Close( sock ) {
 
-	if ( sock.driverdata )
+	if ( sock.driverdata != null )
 		sock.driverdata.driverdata = null;
 
 	sock.receiveMessageLength = 0;

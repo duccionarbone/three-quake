@@ -451,12 +451,12 @@ export function S_StartSound( entnum, entchannel, sfx, origin, fvol, attenuation
 
 	SND_Spatialize( target_chan );
 
-	if ( ! target_chan.leftvol && ! target_chan.rightvol )
+	if ( target_chan.leftvol === 0 && target_chan.rightvol === 0 )
 		return; // not audible at all
 
 	// new channel
 	const sc = S_LoadSound( sfx );
-	if ( ! sc ) {
+	if ( sc == null ) {
 
 		target_chan.sfx = null;
 		return; // couldn't load the sound's data
@@ -464,7 +464,7 @@ export function S_StartSound( entnum, entchannel, sfx, origin, fvol, attenuation
 	}
 
 	// Verify the sound data is valid
-	if ( ! sc.data || sc.length === 0 ) {
+	if ( sc.data == null || sc.length === 0 ) {
 
 		target_chan.sfx = null;
 		return;

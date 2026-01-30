@@ -429,7 +429,7 @@ export function CL_ParseUpdate( bits ) {
 		i = MSG_ReadByte();
 	else
 		i = ent.baseline.colormap;
-	if ( ! i )
+	if ( i === 0 )
 		ent.colormap = null; // vid.colormap
 	else {
 

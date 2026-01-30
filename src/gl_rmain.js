@@ -784,17 +784,17 @@ let polyBlendCamera = null;
 
 export function R_PolyBlend() {
 
-	if ( ! gl_polyblend.value )
+	if ( gl_polyblend.value === 0 )
 		return;
 
-	if ( ! v_blend[ 3 ] )
+	if ( v_blend[ 3 ] === 0 )
 		return;
 
-	if ( ! renderer )
+	if ( renderer == null )
 		return;
 
 	// create overlay geometry on first use
-	if ( ! polyBlendScene ) {
+	if ( polyBlendScene == null ) {
 
 		polyBlendScene = new THREE.Scene();
 		polyBlendCamera = new THREE.OrthographicCamera( - 1, 1, 1, - 1, 0, 1 );

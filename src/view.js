@@ -500,12 +500,12 @@ export function V_CalcBlend() {
 
 	for ( let j = 0; j < NUM_CSHIFTS; j ++ ) {
 
-		if ( ! gl_cshiftpercent.value )
+		if ( gl_cshiftpercent.value === 0 )
 			continue;
 
 		let a2 = ( ( cl.cshifts[ j ].percent * gl_cshiftpercent.value ) / 100.0 ) / 255.0;
 
-		if ( ! a2 )
+		if ( a2 === 0 )
 			continue;
 		a = a + a2 * ( 1 - a );
 		a2 = a2 / a;

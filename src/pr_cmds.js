@@ -559,7 +559,7 @@ function PF_traceline() {
 	VectorCopy( trace.endpos, pr_global_struct.trace_endpos );
 	VectorCopy( trace.plane.normal, pr_global_struct.trace_plane_normal );
 	pr_global_struct.trace_plane_dist = trace.plane.dist;
-	if ( trace.ent )
+	if ( trace.ent != null )
 		pr_global_struct.trace_ent = EDICT_TO_PROG( trace.ent );
 	else
 		pr_global_struct.trace_ent = EDICT_TO_PROG( sv.edicts[ 0 ] );
@@ -1304,7 +1304,7 @@ function PF_aim() {
 	}
 
 	const ret = G_VECTOR( OFS_RETURN );
-	if ( bestent ) {
+	if ( bestent != null ) {
 
 		VectorSubtract( bestent.v.origin, ent.v.origin, dir );
 		const dist = DotProduct( dir, pr_global_struct.v_forward );

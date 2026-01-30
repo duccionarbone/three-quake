@@ -341,7 +341,7 @@ export function Cmd_CompleteCommand( partial ) {
 
 	const len = partial.length;
 
-	if ( ! len )
+	if ( len === 0 )
 		return null;
 
 	// check functions
@@ -372,7 +372,7 @@ export function Cmd_ExecuteString( text, src ) {
 	Cmd_TokenizeString( text );
 
 	// execute the command line
-	if ( ! Cmd_Argc() )
+	if ( Cmd_Argc() === 0 )
 		return; // no tokens
 
 	// check functions

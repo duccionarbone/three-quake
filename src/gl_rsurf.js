@@ -268,18 +268,18 @@ export function R_TextureAnimation( base ) {
 
 	}
 
-	if ( ! base.anim_total )
+	if ( base.anim_total === 0 )
 		return base;
 
 	// cl.time needs to be connected
-	const time = cl ? cl.time : 0;
+	const time = cl != null ? cl.time : 0;
 	reletive = ( ( time * 10 ) | 0 ) % base.anim_total;
 
 	count = 0;
 	while ( base.anim_min > reletive || base.anim_max <= reletive ) {
 
 		base = base.anim_next;
-		if ( ! base )
+		if ( base == null )
 			Sys_Error( 'R_TextureAnimation: broken cycle' );
 		if ( ++ count > 100 )
 			Sys_Error( 'R_TextureAnimation: infinite cycle' );

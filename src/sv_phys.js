@@ -304,7 +304,7 @@ export function ClipVelocity( _in, normal, out, overbounce ) {
 
 	if ( normal[ 2 ] > 0 )
 		blocked |= 1; // floor
-	if ( ! normal[ 2 ] )
+	if ( normal[ 2 ] === 0 )
 		blocked |= 2; // step
 
 	const backoff = DotProduct( _in, normal ) * overbounce;
@@ -356,7 +356,7 @@ export function SV_FlyMove( ent, time, steptrace ) {
 
 	for ( let bumpcount = 0; bumpcount < numbumps; bumpcount ++ ) {
 
-		if ( ! ent.v.velocity[ 0 ] && ! ent.v.velocity[ 1 ] && ! ent.v.velocity[ 2 ] )
+		if ( ent.v.velocity[ 0 ] === 0 && ent.v.velocity[ 1 ] === 0 && ent.v.velocity[ 2 ] === 0 )
 			break;
 
 		for ( let i = 0; i < 3; i ++ )
@@ -384,7 +384,7 @@ export function SV_FlyMove( ent, time, steptrace ) {
 		if ( trace.fraction === 1 )
 			break; // moved the entire distance
 
-		if ( ! trace.ent )
+		if ( trace.ent == null )
 			Sys_Error( 'SV_FlyMove: !trace.ent' );
 
 		if ( trace.plane.normal[ 2 ] > 0.7 ) {
@@ -399,7 +399,7 @@ export function SV_FlyMove( ent, time, steptrace ) {
 
 		}
 
-		if ( ! trace.plane.normal[ 2 ] ) {
+		if ( trace.plane.normal[ 2 ] === 0 ) {
 
 			blocked |= 2; // step
 			if ( steptrace )
@@ -562,7 +562,7 @@ export function SV_PushMove( pusher, movetime ) {
 	for ( let i = 0; i < MAX_EDICTS; i ++ )
 		moved_from[ i ] = new Float32Array( 3 );
 
-	if ( ! pusher.v.velocity[ 0 ] && ! pusher.v.velocity[ 1 ] && ! pusher.v.velocity[ 2 ] ) {
+	if ( pusher.v.velocity[ 0 ] === 0 && pusher.v.velocity[ 1 ] === 0 && pusher.v.velocity[ 2 ] === 0 ) {
 
 		pusher.v.ltime += movetime;
 		return;
@@ -1146,9 +1146,9 @@ export function SV_CheckWaterTransition( ent ) {
 
 	const cont = SV_PointContents( ent.v.origin );
 
-	if ( ! ent.v.watertype ) {
+	if ( ent.v.watertype === 0 ) {
 
-		// just spawned here
+		// just spawned here (watertype not yet initialized)
 		ent.v.watertype = cont;
 		ent.v.waterlevel = 1;
 		return;

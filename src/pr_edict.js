@@ -993,7 +993,9 @@ export function ED_LoadFromFile( data ) {
 		//
 		// immediately call spawn function
 		//
-		if ( ! ent.v.classname ) {
+		// Check if classname string is empty (offset 0 points to empty string)
+		const classname = PR_GetString( ent.v.classname );
+		if ( classname === '' ) {
 
 			Con_Printf( 'No classname for:\n' );
 			ED_Print( ent );
@@ -1003,9 +1005,9 @@ export function ED_LoadFromFile( data ) {
 		}
 
 		// look for the spawn function
-		const func = ED_FindFunction( PR_GetString( ent.v.classname ) );
+		const func = ED_FindFunction( classname );
 
-		if ( ! func ) {
+		if ( func == null ) {
 
 			Con_Printf( 'No spawn function for:\n' );
 			ED_Print( ent );
