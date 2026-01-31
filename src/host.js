@@ -12,8 +12,8 @@ import { STAT_TOTALSECRETS, STAT_TOTALMONSTERS, STAT_SECRETS, STAT_MONSTERS,
 import { NUM_FOR_EDICT, EDICT_NUM, EDICT_TO_PROG } from './progs.js';
 import { PR_ExecuteProgram } from './pr_exec.js';
 import { sv_player } from './sv_phys.js';
-import { cvar_t, Cvar_RegisterVariable } from './cvar.js';
-import { Cmd_Init, Cmd_AddCommand, Cbuf_Init, Cbuf_Execute, Cbuf_AddText, Cbuf_InsertText, Cmd_Argc, Cmd_Argv, Cmd_ExecuteString, cmd_source, src_command, src_client, Cmd_SetClientCallbacks, Cmd_ForwardToServer } from './cmd.js';
+import { cvar_t, Cvar_RegisterVariable, Cvar_Set } from './cvar.js';
+import { Cmd_Init, Cmd_AddCommand, Cbuf_Init, Cbuf_Execute, Cbuf_AddText, Cbuf_InsertText, Cmd_Argc, Cmd_Argv, Cmd_Args, Cmd_ExecuteString, cmd_source, src_command, src_client, Cmd_SetClientCallbacks, Cmd_ForwardToServer } from './cmd.js';
 import { Memory_Init } from './zone.js';
 import { V_Init } from './view.js';
 import { Chase_Init } from './chase.js';
@@ -22,7 +22,7 @@ import { COM_LoadFile } from './pak.js';
 import { Key_Init } from './keys.js';
 import { Con_Init, Con_SetExternals } from './console.js';
 import { M_Init, M_SetExternals } from './menu.js';
-import { PR_Init } from './pr_edict.js';
+import { PR_Init, ED_NewString } from './pr_edict.js';
 import { Mod_Init } from './gl_model.js';
 import { NET_Init, NET_Poll, NET_Shutdown, WT_QueryRooms, WT_CreateRoom } from './net_main.js';
 import { SV_Init, SV_SpawnServer, SV_SaveSpawnparms, SV_CheckForNewClients, SV_ClearDatagram, SV_SendClientMessages, SV_WriteClientdataToMessage, SV_DropClient } from './sv_main.js';
@@ -39,7 +39,7 @@ import { SCR_Init, SCR_UpdateScreen, SCR_SetExternals, SCR_EndLoadingPlaque, SCR
 import { S_Init, S_Update, S_Shutdown, S_StopAllSounds, S_SetCallbacks } from './snd_dma.js';
 import { CDAudio_Init, CDAudio_Update, CDAudio_Shutdown } from './cd_audio.js';
 import { Sbar_Init, Sbar_SetExternals } from './sbar.js';
-import { CL_Init, CL_SendCmd, CL_ReadFromServer, CL_DecayLights, CL_Disconnect, CL_EstablishConnection, CL_NextDemo } from './cl_main.js';
+import { CL_Init, CL_SendCmd, CL_ReadFromServer, CL_DecayLights, CL_Disconnect, CL_EstablishConnection, CL_NextDemo, cl_name } from './cl_main.js';
 import { CL_StopPlayback } from './cl_demo.js';
 import { IN_Init, IN_Commands, IN_Shutdown, IN_UpdateTouch, IN_RequestPointerLock } from './in_web.js';
 import { cls, cl, SIGNONS, ca_connected, ca_dedicated, MAX_DEMOS } from './client.js';
@@ -852,7 +852,60 @@ function Host_Connect_f() {
 
 function Host_Name_f() {
 
-	Con_Printf( 'name not yet implemented\n' );
+	let newName;
+
+	if ( Cmd_Argc() === 1 ) {
+
+		Con_Printf( '"name" is "%s"\n', cl_name.string );
+		return;
+
+	}
+
+	if ( Cmd_Argc() === 2 )
+		newName = Cmd_Argv( 1 );
+	else
+		newName = Cmd_Args();
+
+	// Truncate to 15 characters (like original)
+	if ( newName.length > 15 )
+		newName = newName.substring( 0, 15 );
+
+	if ( cmd_source === src_command ) {
+
+		// Client-side: update cvar and forward to server
+		if ( cl_name.string === newName )
+			return;
+
+		Cvar_Set( '_cl_name', newName );
+
+		if ( cls.state === ca_connected )
+			Cmd_ForwardToServer();
+
+		return;
+
+	}
+
+	// Server-side: update the client's name
+	if ( host_client.name !== '' && host_client.name !== 'unconnected' ) {
+
+		if ( host_client.name !== newName )
+			Con_Printf( '%s renamed to %s\n', host_client.name, newName );
+
+	}
+
+	host_client.name = newName;
+
+	// Set the netname on the edict
+	if ( host_client.edict != null ) {
+
+		host_client.edict.v.netname = ED_NewString( newName );
+
+	}
+
+	// Send notification to all clients
+	MSG_WriteByte( sv.reliable_datagram, svc_updatename );
+	MSG_WriteByte( sv.reliable_datagram, svs.clients.indexOf( host_client ) );
+	MSG_WriteString( sv.reliable_datagram, host_client.name );
 
 }
 
