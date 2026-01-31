@@ -867,9 +867,12 @@ function Host_Name_f() {
 	else
 		newName = Cmd_Args();
 
-	// Truncate to 15 characters (like original)
+	// Sanitize name: only printable ASCII, max 15 chars
+	newName = newName.replace( /[^\x20-\x7E]/g, '' ); // Remove non-printable chars
 	if ( newName.length > 15 )
 		newName = newName.substring( 0, 15 );
+	if ( newName.length === 0 )
+		newName = 'player'; // Fallback for empty names
 
 	if ( cmd_source === src_command ) {
 
@@ -886,11 +889,13 @@ function Host_Name_f() {
 
 	}
 
-	// Server-side: update the client's name
+	// Server-side: update the client's name (only if changed)
+	if ( host_client.name === newName )
+		return; // No change, skip update
+
 	if ( host_client.name !== '' && host_client.name !== 'unconnected' ) {
 
-		if ( host_client.name !== newName )
-			Con_Printf( '%s renamed to %s\n', host_client.name, newName );
+		Con_Printf( '%s renamed to %s\n', host_client.name, newName );
 
 	}
 
