@@ -528,12 +528,11 @@ async function _handleLobbyProtocol(
 				let room = getRoom(roomId);
 
 				// Auto-create room for specific shared link (3LUVYX)
-				// Use current map to avoid triggering a map change that would disconnect existing players
+				// Use rapture1 as the default deathmatch map
 				if (!room && roomId === '3LUVYX') {
 					Sys_Printf('Auto-creating shared room: ' + roomId + '\n');
-					const currentMap = _getCurrentMap ? _getCurrentMap() : 'start';
 					room = createRoomWithId(roomId, {
-						map: currentMap,
+						map: 'rapture1',
 						maxPlayers: 16,
 						hostName: 'Shared'
 					});

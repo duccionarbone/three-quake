@@ -127,8 +127,8 @@ const gameoptions_cursor_table = [ 40, 56, 64, 72, 80, 104, 112 ];
 const NUM_GAMEOPTIONS = 7;
 
 let maxplayers = 4;
-let startepisode = 0;
-let startlevel = 0;
+let startepisode = 2; // Default to Deathmatch Arena
+let startlevel = 1;   // Default to rapture1
 
 // Level data - shareware Episode 1 + community deathmatch maps
 const levels = [
