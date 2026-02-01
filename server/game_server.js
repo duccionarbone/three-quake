@@ -101,6 +101,11 @@ let oldrealtime = 0;
 let lastActiveTime = 0;
 let hadPlayersEver = false;
 
+// Heartbeat tracking
+let frameCount = 0;
+let lastHeartbeat = 0;
+const HEARTBEAT_INTERVAL = 30; // Log every 30 seconds
+
 /**
  * Initialize the game server
  */
@@ -311,6 +316,14 @@ function Host_ServerFrame() {
 
 	// Send messages to all clients
 	SV_SendClientMessages();
+
+	// Heartbeat logging to detect silent freezes
+	frameCount++;
+	if (realtime - lastHeartbeat >= HEARTBEAT_INTERVAL) {
+		const playerCount = countActivePlayers();
+		Sys_Printf('[Heartbeat] time=' + Math.floor(realtime) + ' frames=' + frameCount + ' players=' + playerCount + '\n');
+		lastHeartbeat = realtime;
+	}
 
 	// Track activity for room servers (idle timeout)
 	if (CONFIG.roomId !== null) {
