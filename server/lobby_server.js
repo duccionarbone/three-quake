@@ -221,7 +221,7 @@ async function handleSession( wt, address ) {
 				try {
 					const config = JSON.parse( configJson );
 					const result = await RoomManager_CreateRoom( {
-						map: config.map || 'start',
+						map: config.map || 'rapture1',
 						maxPlayers: config.maxPlayers || 8,
 						hostName: config.hostName || 'Player',
 					} );
@@ -232,13 +232,14 @@ async function handleSession( wt, address ) {
 						await sendFramedMessage( writer, LOBBY_ERROR, errorData );
 						Sys_Printf( 'Room creation failed for %s (limit reached)\n', address );
 					} else {
-						// Send room info with port
+						// Get the actual room info (with sanitized map name)
+						const room = RoomManager_GetRoom( result.id );
 						const roomInfo = {
 							id: result.id,
 							port: result.port,
-							map: config.map || 'start',
-							maxPlayers: config.maxPlayers || 8,
-							hostName: config.hostName || 'Player',
+							map: room !== null ? room.map : ( config.map || 'rapture1' ),
+							maxPlayers: room !== null ? room.maxPlayers : ( config.maxPlayers || 8 ),
+							hostName: room !== null ? room.hostName : ( config.hostName || 'Player' ),
 						};
 						const json = JSON.stringify( roomInfo );
 						const data = new TextEncoder().encode( json );
@@ -265,9 +266,10 @@ async function handleSession( wt, address ) {
 						map: 'rapture1',
 						maxPlayers: 16,
 						hostName: 'Shared',
+						specificId: '3LUVYX',  // Use the specific ID so all joiners end up in same room
 					} );
 					if ( result !== null ) {
-						room = RoomManager_GetRoom( result.id );
+						room = RoomManager_GetRoom( roomId );  // Now this will find the 3LUVYX room
 					}
 				}
 

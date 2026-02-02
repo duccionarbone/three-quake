@@ -74,11 +74,13 @@ function findAvailablePort(): number | null {
 
 /**
  * Create a new room by spawning a dedicated server process
+ * If specificId is provided, use that ID instead of generating a random one
  */
 export async function RoomManager_CreateRoom( config: {
 	map: string;
 	maxPlayers: number;
 	hostName: string;
+	specificId?: string;
 } ): Promise<{ id: string; port: number } | null> {
 	// Check room limit
 	if ( roomProcesses.size >= MAX_ROOMS ) {
@@ -93,16 +95,27 @@ export async function RoomManager_CreateRoom( config: {
 		return null;
 	}
 
-	// Generate unique room ID
-	let id = generateRoomId();
-	while ( roomProcesses.has( id ) ) {
+	// Mark port as used immediately (will be freed on failure)
+	usedPorts.add( port );
+
+	// Generate unique room ID (or use specificId if provided)
+	let id: string;
+	if ( config.specificId != null && config.specificId.length > 0 ) {
+		// Check if specific ID is already in use
+		if ( roomProcesses.has( config.specificId.toUpperCase() ) ) {
+			Sys_Printf( 'Room ID %s already exists\n', config.specificId );
+			usedPorts.delete( port );
+			return null;
+		}
+		id = config.specificId.toUpperCase();
+	} else {
 		id = generateRoomId();
+		while ( roomProcesses.has( id ) ) {
+			id = generateRoomId();
+		}
 	}
 
 	Sys_Printf( 'Creating room %s on port %d (map: %s)\n', id, port, config.map );
-
-	// Mark port as used BEFORE spawning (will be freed on failure)
-	usedPorts.add( port );
 
 	try {
 		// Find the path to the game server script

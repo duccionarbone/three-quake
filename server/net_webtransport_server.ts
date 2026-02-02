@@ -8,38 +8,15 @@ import { net_message } from '../src/net.js';
 let serverPort = 4433;
 let certFile = 'cert.pem';
 let keyFile = 'key.pem';
-let directMode = false; // Skip lobby protocol, accept game connections directly
 
-/**
- * Set direct mode (skip lobby protocol)
- * Used by room servers that accept connections directly
- */
-export function WT_SetDirectMode(enabled: boolean): void {
-	directMode = enabled;
-}
-
-// Callback for map changes when joining rooms
-let _mapChangeCallback: ((mapName: string) => Promise<void>) | null = null;
-let _getCurrentMap: (() => string) | null = null;
-let _setMaxClients: ((maxClients: number) => void) | null = null;
-
-/**
- * Set callbacks for map management
- */
+// DEPRECATED: These functions are no longer used with multi-process architecture
+// Kept for backwards compatibility with game_server.js but they do nothing
+export function WT_SetDirectMode(_enabled: boolean): void {}
 export function WT_SetMapCallbacks(
-	changeMap: (mapName: string) => Promise<void>,
-	getCurrentMap: () => string
-): void {
-	_mapChangeCallback = changeMap;
-	_getCurrentMap = getCurrentMap;
-}
-
-/**
- * Set callback for changing max clients
- */
-export function WT_SetMaxClientsCallback(setMaxClients: (maxClients: number) => void): void {
-	_setMaxClients = setMaxClients;
-}
+	_changeMap: (mapName: string) => Promise<void>,
+	_getCurrentMap: () => string
+): void {}
+export function WT_SetMaxClientsCallback(_setMaxClients: (maxClients: number) => void): void {}
 
 // Connection tracking
 interface ClientConnection {
@@ -329,10 +306,15 @@ function _startBackgroundReaders(
 		} catch (error) {
 			if (conn.connected) {
 				Sys_Printf('Reliable reader error for %s: %s\n', conn.address, String(error));
+				// Only set conn.connected = false, NOT sock.disconnected
+				// sock.disconnected is managed by the Quake network layer via SV_DropClient -> NET_Close
 				conn.connected = false;
-				sock.disconnected = true;
 			}
 		}
+		// Release the reader lock when done
+		try {
+			conn.reliableReader?.releaseLock();
+		} catch { /* ignore */ }
 	})();
 
 	// Read datagrams (unreliable)
