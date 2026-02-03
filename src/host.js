@@ -3,16 +3,16 @@
 import { Sys_Printf, Sys_Error, Sys_FloatTime } from './sys.js';
 import { Con_Printf, Con_DPrintf, Con_SetPrintFunctions, SZ_Write, SZ_Clear,
 	MSG_WriteByte, MSG_WriteShort, MSG_WriteLong, MSG_WriteFloat,
-	MSG_WriteString, MSG_WriteAngle } from './common.js';
+	MSG_WriteString, MSG_WriteAngle, COM_Parse, com_token } from './common.js';
 import { svc_signonnum, svc_time, svc_updatename, svc_updatefrags,
 	svc_updatecolors, svc_lightstyle, svc_updatestat, svc_setangle,
-	svc_clientdata, svc_print } from './protocol.js';
+	svc_clientdata, svc_print, svc_setpause } from './protocol.js';
 import { STAT_TOTALSECRETS, STAT_TOTALMONSTERS, STAT_SECRETS, STAT_MONSTERS,
-	MAX_LIGHTSTYLES } from './quakedef.js';
-import { NUM_FOR_EDICT, EDICT_NUM, EDICT_TO_PROG } from './progs.js';
+	MAX_LIGHTSTYLES, SAVEGAME_COMMENT_LENGTH } from './quakedef.js';
+import { NUM_FOR_EDICT, EDICT_NUM, EDICT_TO_PROG, PR_GetString } from './progs.js';
 import { PR_ExecuteProgram } from './pr_exec.js';
 import { sv_player } from './sv_phys.js';
-import { cvar_t, Cvar_RegisterVariable, Cvar_Set } from './cvar.js';
+import { cvar_t, Cvar_RegisterVariable, Cvar_Set, Cvar_SetValue, Cvar_SetServerBroadcast } from './cvar.js';
 import { Cmd_Init, Cmd_AddCommand, Cbuf_Init, Cbuf_Execute, Cbuf_AddText, Cbuf_InsertText, Cmd_Argc, Cmd_Argv, Cmd_Args, Cmd_ExecuteString, cmd_source, src_command, src_client, Cmd_SetClientCallbacks, Cmd_ForwardToServer } from './cmd.js';
 import { Memory_Init } from './zone.js';
 import { V_Init } from './view.js';
@@ -22,14 +22,14 @@ import { COM_LoadFile } from './pak.js';
 import { Key_Init } from './keys.js';
 import { Con_Init, Con_SetExternals, Con_Printf as RealConPrintf, Con_DPrintf as RealConDPrintf } from './console.js';
 import { M_Init, M_SetExternals } from './menu.js';
-import { PR_Init, ED_NewString } from './pr_edict.js';
+import { PR_Init, ED_NewString, ED_Write, ED_WriteGlobals, ED_ParseGlobals, ED_ParseEdict } from './pr_edict.js';
 import { Mod_Init, Mod_ClearAll } from './gl_model.js';
-import { NET_Init, NET_Poll, NET_Shutdown, WT_QueryRooms, WT_CreateRoom } from './net_main.js';
-import { SV_Init, SV_SpawnServer, SV_SaveSpawnparms, SV_CheckForNewClients, SV_ClearDatagram, SV_SendClientMessages, SV_WriteClientdataToMessage, SV_DropClient } from './sv_main.js';
+import { NET_Init, NET_Poll, NET_Shutdown, WT_QueryRooms, WT_CreateRoom, hostname } from './net_main.js';
+import { SV_Init, SV_SpawnServer, SV_SaveSpawnparms, SV_CheckForNewClients, SV_ClearDatagram, SV_SendClientMessages, SV_WriteClientdataToMessage, SV_DropClient, current_skill } from './sv_main.js';
 import { SV_RunClients } from './sv_user.js';
 import { SV_Physics, SV_SetFrametime, FL_GODMODE, FL_NOTARGET,
 	MOVETYPE_WALK, MOVETYPE_FLY, MOVETYPE_NOCLIP } from './sv_phys.js';
-import { sv, svs, client_t, NUM_SPAWN_PARMS,
+import { sv, svs, client_t, NUM_SPAWN_PARMS, NUM_PING_TIMES,
 	host_client, set_host_client } from './server.js';
 import { R_InitTextures, R_Init, D_FlushCaches } from './gl_rmisc.js';
 import { VID_Init, VID_Shutdown } from './vid.js';
@@ -38,12 +38,13 @@ import { SCR_Init, SCR_UpdateScreen, SCR_SetExternals, SCR_EndLoadingPlaque, SCR
 import { S_Init, S_Update, S_Shutdown, S_StopAllSounds, S_SetCallbacks } from './snd_dma.js';
 import { CDAudio_Init, CDAudio_Update, CDAudio_Shutdown } from './cd_audio.js';
 import { Sbar_Init, Sbar_SetExternals } from './sbar.js';
-import { CL_Init, CL_SendCmd, CL_ReadFromServer, CL_DecayLights, CL_Disconnect, CL_EstablishConnection, CL_NextDemo, cl_name } from './cl_main.js';
+import { CL_Init, CL_SendCmd, CL_ReadFromServer, CL_DecayLights, CL_Disconnect, CL_EstablishConnection, CL_NextDemo, cl_name, cl_color } from './cl_main.js';
 import { CL_StopPlayback } from './cl_demo.js';
 import { IN_Init, IN_Commands, IN_Shutdown, IN_UpdateTouch, IN_RequestPointerLock } from './in_web.js';
 import { cls, cl, SIGNONS, ca_connected, ca_dedicated, MAX_DEMOS } from './client.js';
 import { key_dest, key_game, Key_SetExternals, set_key_dest } from './keys.js';
 import { r_origin, vpn, vright, vup } from './render.js';
+import { SV_LinkEdict } from './world.js';
 import { R_Efrag_SetExternals } from './gl_refrag.js';
 import { vec3_origin } from './mathlib.js';
 import { pr_global_struct } from './progs.js';
@@ -81,7 +82,7 @@ export let host_colormap = null;
 const host_framerate = new cvar_t( 'host_framerate', '0' ); // set for slow motion
 const host_speeds = new cvar_t( 'host_speeds', '0' ); // set for running times
 
-const sys_ticrate = new cvar_t( 'sys_ticrate', '0.05' );
+export const sys_ticrate = new cvar_t( 'sys_ticrate', '0.05' );
 const serverprofile = new cvar_t( 'serverprofile', '0' );
 
 export const fraglimit = new cvar_t( 'fraglimit', '0', false, true );
@@ -299,6 +300,17 @@ export async function Host_Init( parms ) {
 	Mod_Init();
 	NET_Init();
 	SV_Init();
+
+	// Wire up cvar server broadcast callback
+	Cvar_SetServerBroadcast( function ( msg ) {
+
+		if ( sv.active ) {
+
+			SV_BroadcastPrintf( '%s', msg );
+
+		}
+
+	} );
 
 	R_InitTextures(); // needed even for dedicated servers
 
@@ -946,31 +958,221 @@ function Host_Name_f() {
 
 function Host_Pause_f() {
 
-	Con_Printf( 'pause not yet implemented\n' );
+	if ( cmd_source === src_command ) {
+
+		Cmd_ForwardToServer();
+		return;
+
+	}
+
+	if ( pausable.value === 0 ) {
+
+		SV_ClientPrintf( 'Pause not allowed.\n' );
+
+	} else {
+
+		sv.paused = sv.paused ^ 1;
+
+		if ( sv.paused ) {
+
+			SV_BroadcastPrintf( '%s paused the game\n', PR_GetString( sv_player.v.netname ) );
+
+		} else {
+
+			SV_BroadcastPrintf( '%s unpaused the game\n', PR_GetString( sv_player.v.netname ) );
+
+		}
+
+		// send notification to all clients
+		MSG_WriteByte( sv.reliable_datagram, svc_setpause );
+		MSG_WriteByte( sv.reliable_datagram, sv.paused );
+
+	}
+
+}
+
+function Host_Say( teamonly ) {
+
+	let fromServer = false;
+
+	if ( cmd_source === src_command ) {
+
+		if ( cls.state === ca_dedicated ) {
+
+			fromServer = true;
+			teamonly = false;
+
+		} else {
+
+			Cmd_ForwardToServer();
+			return;
+
+		}
+
+	}
+
+	if ( Cmd_Argc() < 2 ) return;
+
+	const save = host_client;
+
+	let p = Cmd_Args();
+
+	// remove quotes if present
+	if ( p.charAt( 0 ) === '"' ) {
+
+		p = p.substring( 1, p.length - 1 );
+
+	}
+
+	// turn on color set 1
+	let text;
+	if ( fromServer === false ) {
+
+		text = '\x01' + save.name + ': ';
+
+	} else {
+
+		text = '\x01<' + hostname.string + '> ';
+
+	}
+
+	// truncate if too long
+	const maxLen = 62 - text.length; // 64 - 2 for \n and safety
+	if ( p.length > maxLen ) {
+
+		p = p.substring( 0, maxLen );
+
+	}
+
+	text += p + '\n';
+
+	for ( let j = 0; j < svs.maxclients; j ++ ) {
+
+		const client = svs.clients[ j ];
+		if ( client == null || client.active === false || client.spawned === false ) continue;
+		if ( teamplay.value !== 0 && teamonly && client.edict.v.team !== save.edict.v.team ) continue;
+		set_host_client( client );
+		SV_ClientPrintf( '%s', text );
+
+	}
+
+	set_host_client( save );
+
+	Sys_Printf( '%s', text.substring( 1 ) );
 
 }
 
 function Host_Say_f() {
 
-	Con_Printf( 'say not yet implemented\n' );
+	Host_Say( false );
 
 }
 
 function Host_Say_Team_f() {
 
-	Con_Printf( 'say_team not yet implemented\n' );
+	Host_Say( true );
 
 }
 
 function Host_Tell_f() {
 
-	Con_Printf( 'tell not yet implemented\n' );
+	if ( cmd_source === src_command ) {
+
+		Cmd_ForwardToServer();
+		return;
+
+	}
+
+	if ( Cmd_Argc() < 3 ) return;
+
+	let text = host_client.name + ': ';
+
+	let p = Cmd_Args();
+
+	// remove quotes if present
+	if ( p.charAt( 0 ) === '"' ) {
+
+		p = p.substring( 1, p.length - 1 );
+
+	}
+
+	// truncate if too long
+	const maxLen = 62 - text.length;
+	if ( p.length > maxLen ) {
+
+		p = p.substring( 0, maxLen );
+
+	}
+
+	text += p + '\n';
+
+	const save = host_client;
+
+	for ( let j = 0; j < svs.maxclients; j ++ ) {
+
+		const client = svs.clients[ j ];
+		if ( client == null || client.active === false || client.spawned === false ) continue;
+		if ( client.name.toLowerCase() !== Cmd_Argv( 1 ).toLowerCase() ) continue;
+		set_host_client( client );
+		SV_ClientPrintf( '%s', text );
+		break;
+
+	}
+
+	set_host_client( save );
 
 }
 
 function Host_Color_f() {
 
-	Con_Printf( 'color not yet implemented\n' );
+	if ( Cmd_Argc() === 1 ) {
+
+		Con_Printf( '"color" is "' + ( ( cl_color.value | 0 ) >> 4 ) + ' ' + ( ( cl_color.value | 0 ) & 0x0f ) + '"\n' );
+		Con_Printf( 'color <0-13> [0-13]\n' );
+		return;
+
+	}
+
+	let top, bottom;
+
+	if ( Cmd_Argc() === 2 ) {
+
+		top = bottom = parseInt( Cmd_Argv( 1 ) ) || 0;
+
+	} else {
+
+		top = parseInt( Cmd_Argv( 1 ) ) || 0;
+		bottom = parseInt( Cmd_Argv( 2 ) ) || 0;
+
+	}
+
+	top &= 15;
+	if ( top > 13 ) top = 13;
+	bottom &= 15;
+	if ( bottom > 13 ) bottom = 13;
+
+	const playercolor = top * 16 + bottom;
+
+	if ( cmd_source === src_command ) {
+
+		Cvar_SetValue( '_cl_color', playercolor );
+		if ( cls.state === ca_connected ) {
+
+			Cmd_ForwardToServer();
+
+		}
+
+		return;
+
+	}
+
+	host_client.colors = playercolor;
+	host_client.edict.v.team = bottom + 1;
+
+	// send notification to all clients
+	MSG_WriteByte( sv.reliable_datagram, svc_updatecolors );
+	MSG_WriteByte( sv.reliable_datagram, svs.clients.indexOf( host_client ) );
+	MSG_WriteByte( sv.reliable_datagram, host_client.colors );
 
 }
 
@@ -1141,25 +1343,459 @@ function Host_Give_f() {
 
 function Host_Ping_f() {
 
-	Con_Printf( 'ping not yet implemented\n' );
+	if ( cmd_source === src_command ) {
+
+		Cmd_ForwardToServer();
+		return;
+
+	}
+
+	SV_ClientPrintf( 'Client ping times:\n' );
+
+	for ( let i = 0; i < svs.maxclients; i ++ ) {
+
+		const client = svs.clients[ i ];
+		if ( client == null || client.active === false ) continue;
+
+		let total = 0;
+		for ( let j = 0; j < NUM_PING_TIMES; j ++ ) {
+
+			total += client.ping_times[ j ];
+
+		}
+
+		total /= NUM_PING_TIMES;
+		SV_ClientPrintf( '  ' + ( ( total * 1000 ) | 0 ) + ' ' + client.name + '\n' );
+
+	}
 
 }
 
 function Host_Kick_f() {
 
-	Con_Printf( 'kick not yet implemented\n' );
+	if ( cmd_source === src_command ) {
+
+		if ( sv.active === false ) {
+
+			Cmd_ForwardToServer();
+			return;
+
+		}
+
+	} else if ( pr_global_struct.deathmatch !== 0 && host_client.privileged === false ) {
+
+		return;
+
+	}
+
+	const save = host_client;
+
+	let i;
+	let byNumber = false;
+
+	if ( Cmd_Argc() > 2 && Cmd_Argv( 1 ) === '#' ) {
+
+		i = ( parseFloat( Cmd_Argv( 2 ) ) | 0 ) - 1;
+		if ( i < 0 || i >= svs.maxclients ) return;
+		if ( svs.clients[ i ] == null || svs.clients[ i ].active === false ) return;
+		set_host_client( svs.clients[ i ] );
+		byNumber = true;
+
+	} else {
+
+		for ( i = 0; i < svs.maxclients; i ++ ) {
+
+			set_host_client( svs.clients[ i ] );
+			if ( host_client == null || host_client.active === false ) continue;
+			if ( host_client.name.toLowerCase() === Cmd_Argv( 1 ).toLowerCase() ) break;
+
+		}
+
+	}
+
+	if ( i < svs.maxclients ) {
+
+		let who;
+		if ( cmd_source === src_command ) {
+
+			if ( cls.state === ca_dedicated ) {
+
+				who = 'Console';
+
+			} else {
+
+				who = cl_name.string;
+
+			}
+
+		} else {
+
+			who = save.name;
+
+		}
+
+		// can't kick yourself!
+		if ( host_client === save ) {
+
+			set_host_client( save );
+			return;
+
+		}
+
+		let message = null;
+		if ( Cmd_Argc() > 2 ) {
+
+			let args = Cmd_Args();
+			if ( byNumber ) {
+
+				// skip the # and number
+				const numStr = Cmd_Argv( 2 );
+				const hashIdx = args.indexOf( '#' );
+				if ( hashIdx >= 0 ) {
+
+					args = args.substring( hashIdx + 1 ).trim();
+					args = args.substring( numStr.length ).trim();
+
+				}
+
+			}
+
+			if ( args.length > 0 ) {
+
+				message = args;
+
+			}
+
+		}
+
+		if ( message != null ) {
+
+			SV_ClientPrintf( 'Kicked by ' + who + ': ' + message + '\n' );
+
+		} else {
+
+			SV_ClientPrintf( 'Kicked by ' + who + '\n' );
+
+		}
+
+		SV_DropClient( false );
+
+	}
+
+	set_host_client( save );
 
 }
 
+const SAVEGAME_VERSION = 5;
+const SAVE_STORAGE_PREFIX = 'quake_save_';
+
+/*
+===============
+Host_SavegameComment
+
+Writes a SAVEGAME_COMMENT_LENGTH character comment describing the current game
+===============
+*/
+function Host_SavegameComment() {
+
+	// Build comment: levelname padded to 22 chars, then kills:xxx/xxx
+	let text = cl.levelname || '';
+	while ( text.length < 22 ) text += ' ';
+	text = text.substring( 0, 22 );
+
+	const kills = 'kills:' + String( cl.stats[ STAT_MONSTERS ] ).padStart( 3, ' ' ) + '/' + String( cl.stats[ STAT_TOTALMONSTERS ] ).padStart( 3, ' ' );
+	text += kills;
+
+	// Pad to SAVEGAME_COMMENT_LENGTH
+	while ( text.length < SAVEGAME_COMMENT_LENGTH ) text += ' ';
+	text = text.substring( 0, SAVEGAME_COMMENT_LENGTH );
+
+	// convert spaces to _ (original C format)
+	return text.replace( / /g, '_' );
+
+}
+
+/*
+===============
+Host_Savegame_f
+===============
+*/
 function Host_Savegame_f() {
 
-	Con_Printf( 'save not yet implemented\n' );
+	if ( cmd_source !== src_command ) return;
+
+	if ( sv.active === false ) {
+
+		Con_Printf( 'Not playing a local game.\n' );
+		return;
+
+	}
+
+	if ( cl.intermission !== 0 ) {
+
+		Con_Printf( 'Can\'t save in intermission.\n' );
+		return;
+
+	}
+
+	if ( svs.maxclients !== 1 ) {
+
+		Con_Printf( 'Can\'t save multiplayer games.\n' );
+		return;
+
+	}
+
+	if ( Cmd_Argc() !== 2 ) {
+
+		Con_Printf( 'save <savename> : save a game\n' );
+		return;
+
+	}
+
+	if ( Cmd_Argv( 1 ).indexOf( '..' ) !== - 1 ) {
+
+		Con_Printf( 'Relative pathnames are not allowed.\n' );
+		return;
+
+	}
+
+	for ( let i = 0; i < svs.maxclients; i ++ ) {
+
+		if ( svs.clients[ i ] != null && svs.clients[ i ].active && svs.clients[ i ].edict.v.health <= 0 ) {
+
+			Con_Printf( 'Can\'t savegame with a dead player\n' );
+			return;
+
+		}
+
+	}
+
+	const name = Cmd_Argv( 1 );
+
+	Con_Printf( 'Saving game to %s...\n', name );
+
+	const lines = [];
+
+	lines.push( String( SAVEGAME_VERSION ) );
+	lines.push( Host_SavegameComment() );
+
+	for ( let i = 0; i < NUM_SPAWN_PARMS; i ++ ) {
+
+		lines.push( String( svs.clients[ 0 ].spawn_parms[ i ] ) );
+
+	}
+
+	lines.push( String( current_skill ) );
+	lines.push( sv.name );
+	lines.push( String( sv.time ) );
+
+	// write the light styles
+	for ( let i = 0; i < MAX_LIGHTSTYLES; i ++ ) {
+
+		if ( sv.lightstyles[ i ] != null ) {
+
+			lines.push( sv.lightstyles[ i ] );
+
+		} else {
+
+			lines.push( 'm' );
+
+		}
+
+	}
+
+	// write globals
+	ED_WriteGlobals( lines );
+
+	// write all edicts
+	for ( let i = 0; i < sv.num_edicts; i ++ ) {
+
+		ED_Write( lines, EDICT_NUM( i ) );
+
+	}
+
+	// Store in localStorage
+	const saveData = lines.join( '\n' ) + '\n';
+
+	try {
+
+		localStorage.setItem( SAVE_STORAGE_PREFIX + name, saveData );
+
+	} catch ( e ) {
+
+		Con_Printf( 'ERROR: couldn\'t save (localStorage full?).\n' );
+		return;
+
+	}
+
+	Con_Printf( 'done.\n' );
 
 }
 
+/*
+===============
+Host_Loadgame_f
+===============
+*/
 function Host_Loadgame_f() {
 
-	Con_Printf( 'load not yet implemented\n' );
+	if ( cmd_source !== src_command ) return;
+
+	if ( Cmd_Argc() !== 2 ) {
+
+		Con_Printf( 'load <savename> : load a game\n' );
+		return;
+
+	}
+
+	cls.demonum = - 1; // stop demo loop in case this fails
+
+	const name = Cmd_Argv( 1 );
+
+	Con_Printf( 'Loading game from %s...\n', name );
+
+	let saveData;
+
+	try {
+
+		saveData = localStorage.getItem( SAVE_STORAGE_PREFIX + name );
+
+	} catch ( e ) {
+
+		// ignore
+	}
+
+	if ( saveData == null ) {
+
+		Con_Printf( 'ERROR: couldn\'t open.\n' );
+		return;
+
+	}
+
+	// Parse the save file line by line
+	const allLines = saveData.split( '\n' );
+	let lineIdx = 0;
+
+	function nextLine() {
+
+		if ( lineIdx < allLines.length ) return allLines[ lineIdx ++ ];
+		return '';
+
+	}
+
+	const version = parseInt( nextLine() );
+	if ( version !== SAVEGAME_VERSION ) {
+
+		Con_Printf( 'Savegame is version %i, not %i\n', version, SAVEGAME_VERSION );
+		return;
+
+	}
+
+	nextLine(); // skip comment
+
+	const spawn_parms = new Float32Array( NUM_SPAWN_PARMS );
+	for ( let i = 0; i < NUM_SPAWN_PARMS; i ++ ) {
+
+		spawn_parms[ i ] = parseFloat( nextLine() ) || 0;
+
+	}
+
+	// this silliness is so we can load 1.06 save files, which have float skill values
+	const tfloat = parseFloat( nextLine() ) || 0;
+	const loadSkill = ( tfloat + 0.1 ) | 0;
+	Cvar_SetValue( 'skill', loadSkill );
+
+	const mapname = nextLine();
+	const time = parseFloat( nextLine() ) || 0;
+
+	CL_Disconnect();
+
+	SV_SpawnServer( mapname );
+
+	if ( sv.active === false ) {
+
+		Con_Printf( 'Couldn\'t load map\n' );
+		return;
+
+	}
+
+	sv.paused = true; // pause until all clients connect
+	sv.loadgame = true;
+
+	// load the light styles
+	for ( let i = 0; i < MAX_LIGHTSTYLES; i ++ ) {
+
+		sv.lightstyles[ i ] = nextLine();
+
+	}
+
+	// load the edicts out of the savegame file
+	// Remaining lines form brace-delimited blocks: first is globals, then edicts
+	let remaining = allLines.slice( lineIdx ).join( '\n' );
+	let entnum = - 1; // -1 is the globals
+
+	while ( remaining.length > 0 ) {
+
+		// Find the next { ... } block
+		const braceStart = remaining.indexOf( '{' );
+		if ( braceStart === - 1 ) break;
+
+		let braceEnd = remaining.indexOf( '}', braceStart );
+		if ( braceEnd === - 1 ) break;
+
+		const block = remaining.substring( braceStart, braceEnd + 1 );
+		remaining = remaining.substring( braceEnd + 1 );
+
+		// Parse the content inside braces
+		let data = block;
+		data = COM_Parse( data );
+		if ( com_token.length === 0 ) break; // end of file
+		if ( com_token !== '{' ) {
+
+			Sys_Error( 'First token isn\'t a brace' );
+
+		}
+
+		if ( entnum === - 1 ) {
+
+			// parse the global vars
+			ED_ParseGlobals( data );
+
+		} else {
+
+			// parse an edict
+			const ent = EDICT_NUM( entnum );
+			ent.free = false;
+			ED_ParseEdict( data, ent );
+
+			// link it into the bsp tree
+			if ( ent.free === false ) {
+
+				SV_LinkEdict( ent, false );
+
+			}
+
+		}
+
+		entnum ++;
+
+	}
+
+	sv.num_edicts = entnum;
+	sv.time = time;
+
+	for ( let i = 0; i < NUM_SPAWN_PARMS; i ++ ) {
+
+		svs.clients[ 0 ].spawn_parms[ i ] = spawn_parms[ i ];
+
+	}
+
+	if ( cls.state !== ca_dedicated ) {
+
+		CL_EstablishConnection( 'local' );
+		Host_Reconnect_f();
+
+	}
 
 }
 

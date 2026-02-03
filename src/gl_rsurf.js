@@ -771,8 +771,7 @@ export function R_RenderBrushPoly( fa ) {
 
 	if ( fa.flags & SURF_DRAWSKY ) {
 
-		// warp texture, no lightmaps
-		// EmitBothSkyLayers(fa) -- TODO
+		// Sky surfaces are rendered via skychain in R_DrawSkyChain, not here
 		return;
 
 	}

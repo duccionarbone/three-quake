@@ -574,13 +574,11 @@ PF_checkpos
 
 Returns true if the given entity can move to the given position from its
 current position by walking or rolling.
-FIXME: make work...
+Not implemented in original Quake either (dead code in id's source).
 scalar checkpos (entity, vector)
 =================
 */
 function PF_checkpos() {
-
-	// Not implemented in original Quake either
 
 }
 
@@ -1530,7 +1528,7 @@ function PF_changelevel() {
 
 /*
 =================
-SV_MoveToGoal (stub)
+SV_MoveToGoal
 =================
 */
 function SV_MoveToGoal() {

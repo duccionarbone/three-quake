@@ -6,7 +6,7 @@ import { Con_Printf, Con_DPrintf, SZ_Clear,
 	LittleLong, LittleFloat,
 	net_message, COM_DefaultExtension } from './common.js';
 import { Sys_Error } from './sys.js';
-import { Cmd_Argc, Cmd_Argv, cmd_source, src_command } from './cmd.js';
+import { Cmd_Argc, Cmd_Argv, Cmd_ExecuteString, cmd_source, src_command } from './cmd.js';
 import { svc_nop, svc_disconnect } from './protocol.js';
 import { VectorCopy } from './mathlib.js';
 import { SIGNONS, cl, cls, ca_disconnected, ca_connected } from './client.js';
@@ -58,25 +58,79 @@ CL_WriteDemoMessage
 Dumps the current net message, prefixed by the length and view angles
 ====================
 */
+// Demo recording buffer state
+let demo_buffer = null; // Uint8Array
+let demo_buffer_pos = 0;
+let demo_name = '';
+
+function DemoBuffer_Init( name ) {
+
+	demo_buffer = new Uint8Array( 65536 );
+	demo_buffer_pos = 0;
+	demo_name = name;
+
+}
+
+function DemoBuffer_Grow( needed ) {
+
+	if ( demo_buffer_pos + needed <= demo_buffer.length ) return;
+
+	let newSize = demo_buffer.length;
+	while ( newSize < demo_buffer_pos + needed ) {
+
+		newSize *= 2;
+
+	}
+
+	const newBuf = new Uint8Array( newSize );
+	newBuf.set( demo_buffer );
+	demo_buffer = newBuf;
+
+}
+
+function DemoBuffer_WriteBytes( data, offset, length ) {
+
+	DemoBuffer_Grow( length );
+	for ( let i = 0; i < length; i ++ ) {
+
+		demo_buffer[ demo_buffer_pos ++ ] = data[ offset + i ];
+
+	}
+
+}
+
+function DemoBuffer_WriteString( str ) {
+
+	DemoBuffer_Grow( str.length );
+	for ( let i = 0; i < str.length; i ++ ) {
+
+		demo_buffer[ demo_buffer_pos ++ ] = str.charCodeAt( i );
+
+	}
+
+}
+
+const _demoWriteView = new DataView( new ArrayBuffer( 16 ) );
+
 export function CL_WriteDemoMessage() {
 
-	// In the browser, demo writing would need to accumulate to a buffer
-	// then offer as download. For now, this is a stub.
-	// The original writes: 4 bytes length, 3x4 bytes viewangles, then message data
-
-	if ( ! cls.demofile )
+	if ( demo_buffer == null )
 		return;
 
-	// In a real implementation:
-	// const len = LittleLong( net_message.cursize );
-	// write len (4 bytes)
-	// for ( let i = 0; i < 3; i++ ) {
-	//     const f = LittleFloat( cl.viewangles[i] );
-	//     write f (4 bytes)
-	// }
-	// write net_message.data[0..cursize] bytes
+	// Write message length (4 bytes, little-endian)
+	_demoWriteView.setInt32( 0, net_message.cursize, true );
 
-	Con_DPrintf( 'CL_WriteDemoMessage: %i bytes\n', net_message.cursize );
+	// Write view angles (3x4 bytes, little-endian float)
+	for ( let i = 0; i < 3; i ++ ) {
+
+		_demoWriteView.setFloat32( 4 + i * 4, cl.viewangles[ i ], true );
+
+	}
+
+	DemoBuffer_WriteBytes( new Uint8Array( _demoWriteView.buffer ), 0, 16 );
+
+	// Write message data
+	DemoBuffer_WriteBytes( net_message.data, 0, net_message.cursize );
 
 }
 
@@ -206,7 +260,7 @@ export function CL_Stop_f() {
 	if ( cmd_source !== src_command )
 		return;
 
-	if ( ! cls.demorecording ) {
+	if ( cls.demorecording === false ) {
 
 		Con_Printf( 'Not recording a demo.\n' );
 		return;
@@ -218,7 +272,22 @@ export function CL_Stop_f() {
 	MSG_WriteByte( net_message, svc_disconnect );
 	CL_WriteDemoMessage();
 
+	// download the demo file
+	if ( demo_buffer != null && demo_buffer_pos > 0 ) {
+
+		const blob = new Blob( [ demo_buffer.slice( 0, demo_buffer_pos ) ], { type: 'application/octet-stream' } );
+		const url = URL.createObjectURL( blob );
+		const a = document.createElement( 'a' );
+		a.href = url;
+		a.download = demo_name;
+		a.click();
+		URL.revokeObjectURL( url );
+
+	}
+
 	// finish up
+	demo_buffer = null;
+	demo_buffer_pos = 0;
 	cls.demofile = null;
 	cls.demorecording = false;
 	Con_Printf( 'Completed demo\n' );
@@ -269,15 +338,26 @@ export function CL_Record_f() {
 	} else
 		track = - 1;
 
-	// In browser environment, demo recording would accumulate data in memory
-	// and offer it as a download when stopped
 	const name = COM_DefaultExtension( Cmd_Argv( 1 ), '.dem' );
+
+	// start the map up
+	if ( c > 2 ) {
+
+		Cmd_ExecuteString( 'map ' + Cmd_Argv( 2 ), src_command );
+
+	}
 
 	Con_Printf( 'recording to %s.\n', name );
 
-	// TODO: Implement browser-based demo recording
-	// cls.demofile = ...;
+	// Create in-memory buffer for demo data
+	DemoBuffer_Init( name );
+
 	cls.forcetrack = track;
+
+	// Write forced track header (text line)
+	DemoBuffer_WriteString( String( cls.forcetrack ) + '\n' );
+
+	cls.demofile = true; // flag that recording is active (checked by CL_WriteDemoMessage)
 	cls.demorecording = true;
 
 }

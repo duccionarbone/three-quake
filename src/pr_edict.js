@@ -2,6 +2,7 @@
 
 import { Sys_Error } from './sys.js';
 import { Con_Printf, Con_DPrintf, COM_Parse, com_token } from './common.js';
+import { Cmd_AddCommand, Cmd_Argv } from './cmd.js';
 import { PR_InitBuiltins } from './pr_cmds.js';
 import { CRC_Init, CRC_ProcessByte, CRC_Value } from './crc.js';
 import { VectorCopy, vec3_origin } from './mathlib.js';
@@ -144,13 +145,10 @@ export function ED_Alloc() {
 ED_Free
 
 Marks the edict as free
-FIXME: walk all entities and NULL out references to this entity
 =================
 */
 export function ED_Free( ed ) {
 
-	// SV_UnlinkEdict(ed) - unlink from world bsp
-	// TODO: call when sv_world is implemented
 	if ( sv.SV_UnlinkEdict ) {
 
 		sv.SV_UnlinkEdict( ed );
@@ -577,6 +575,27 @@ export function ED_Write( lines, ed ) {
 export function ED_PrintNum( ent ) {
 
 	ED_Print( EDICT_NUM( ent ) );
+
+}
+
+/*
+=============
+ED_PrintEdict_f
+
+For debugging, prints a single edict
+=============
+*/
+function ED_PrintEdict_f() {
+
+	const i = parseInt( Cmd_Argv( 1 ) ) || 0;
+	if ( i >= sv.num_edicts ) {
+
+		Con_Printf( 'Bad edict number\n' );
+		return;
+
+	}
+
+	ED_PrintNum( i );
 
 }
 
@@ -1191,19 +1210,63 @@ export function PR_LoadProgs( fileData ) {
 }
 
 /*
+============
+PR_Profile_f
+============
+*/
+function PR_Profile_f() {
+
+	let num = 0;
+
+	do {
+
+		let max = 0;
+		let best = null;
+
+		for ( let i = 0; i < progs.numfunctions; i ++ ) {
+
+			const f = pr_functions[ i ];
+			if ( f.profile > max ) {
+
+				max = f.profile;
+				best = f;
+
+			}
+
+		}
+
+		if ( best != null ) {
+
+			if ( num < 10 ) {
+
+				Con_Printf( '%7i %s\n', best.profile, PR_GetString( best.s_name ) );
+
+			}
+
+			num ++;
+			best.profile = 0;
+
+		} else {
+
+			break;
+
+		}
+
+	} while ( true );
+
+}
+
+/*
 ===============
 PR_Init
 ===============
 */
 export function PR_Init() {
 
-	// TODO: register console commands when cmd system is available
-	// Cmd_AddCommand("edict", ED_PrintEdict_f);
-	// Cmd_AddCommand("edicts", ED_PrintEdicts);
-	// Cmd_AddCommand("edictcount", ED_Count);
-	// Cmd_AddCommand("profile", PR_Profile_f);
-
-	// TODO: register cvars when cvar system is available
+	Cmd_AddCommand( 'edict', ED_PrintEdict_f );
+	Cmd_AddCommand( 'edicts', ED_PrintEdicts );
+	Cmd_AddCommand( 'edictcount', ED_Count );
+	Cmd_AddCommand( 'profile', PR_Profile_f );
 
 	PR_InitBuiltins();
 

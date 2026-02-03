@@ -985,17 +985,25 @@ export function R_RenderView() {
 }
 
 //============================================================================
-// R_Mirror (stub)
+// R_Mirror
+//
+// Only one mirror exists in the entire game (e2m3).
+// Requires render-to-texture with flipped camera — not yet implemented.
 //============================================================================
+
+let _mirrorWarned = false;
 
 function R_Mirror() {
 
-	if ( ! mirror )
+	if ( mirror === false )
 		return;
 
-	// TODO: full mirror implementation
-	// Save r_base_world_matrix, reflect vieworg across mirror_plane,
-	// re-render scene, blend on top
+	if ( _mirrorWarned === false ) {
+
+		Con_Printf( 'R_Mirror: mirror rendering not yet implemented\n' );
+		_mirrorWarned = true;
+
+	}
 
 }
 
@@ -1116,7 +1124,7 @@ function R_DrawWaterSurfaces() {
 
 function S_ExtraUpdate() {
 
-	// TODO: connect to sound system
+	// Sound system updates independently via S_Update() in the frame loop
 
 }
 

@@ -3,7 +3,7 @@
 import { Cmd_AddCommand } from './cmd.js';
 import { Cvar_RegisterVariable } from './cvar.js';
 import { key_dest, set_key_dest, key_game, key_console, key_message,
-	key_lines, edit_line, key_linepos } from './keys.js';
+	key_lines, edit_line, key_linepos, chat_buffer } from './keys.js';
 import { Draw_GetUIScale } from './gl_draw.js';
 
 /*
@@ -566,8 +566,16 @@ export function Con_DrawNotify() {
 
 		if ( _Draw_String ) _Draw_String( 8, v, 'say:' );
 
-		// Draw chat buffer - imported from keys module
-		// For now, a stub since chat_buffer is in keys.js
+		if ( _Draw_Character ) {
+
+			for ( let x = 0; x < chat_buffer.length; x ++ ) {
+
+				_Draw_Character( ( x + 5 ) << 3, v, chat_buffer.charCodeAt( x ) );
+
+			}
+
+		}
+
 		v += 8;
 
 	}

@@ -5,6 +5,7 @@ import { Cvar_RegisterVariable } from './cvar.js';
 import { Cmd_AddCommand } from './cmd.js';
 import { Con_Printf } from './console.js';
 import { Draw_GetUIScale } from './gl_draw.js';
+import { renderer } from './vid.js';
 
 /*
 ==============================================================================
@@ -341,8 +342,32 @@ SCR_ScreenShot_f
 */
 function SCR_ScreenShot_f() {
 
-	// In browser, we could use canvas.toDataURL()
-	Con_Printf( 'Screenshot: not implemented in browser\n' );
+	if ( renderer == null ) {
+
+		Con_Printf( 'Screenshot: renderer not initialized\n' );
+		return;
+
+	}
+
+	const canvas = renderer.domElement;
+	canvas.toBlob( function ( blob ) {
+
+		if ( blob == null ) {
+
+			Con_Printf( 'Screenshot: failed to create image\n' );
+			return;
+
+		}
+
+		const url = URL.createObjectURL( blob );
+		const a = document.createElement( 'a' );
+		a.href = url;
+		a.download = 'quake' + String( Date.now() ) + '.png';
+		a.click();
+		URL.revokeObjectURL( url );
+		Con_Printf( 'Wrote ' + a.download + '\n' );
+
+	}, 'image/png' );
 
 }
 

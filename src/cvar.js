@@ -21,6 +21,15 @@ Cvar_RegisterVariable(host_framerate);
 import { Con_Printf } from './common.js';
 import { Cmd_Exists, Cmd_Argc, Cmd_Argv } from './cmd.js';
 
+// Callback for broadcasting server cvar changes (injected to avoid circular deps)
+let _serverBroadcast = null;
+
+export function Cvar_SetServerBroadcast( fn ) {
+
+	_serverBroadcast = fn;
+
+}
+
 // localStorage key prefix for saved cvars
 const CVAR_STORAGE_PREFIX = 'quake_cvar_';
 
@@ -173,7 +182,11 @@ export function Cvar_Set( var_name, value ) {
 
 	if ( _var.server && changed ) {
 
-		// TODO: if (sv.active) SV_BroadcastPrintf(...)
+		if ( _serverBroadcast != null ) {
+
+			_serverBroadcast( '"' + _var.name + '" changed to "' + _var.string + '"\n' );
+
+		}
 
 	}
 
