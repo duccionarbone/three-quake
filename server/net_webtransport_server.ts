@@ -589,7 +589,21 @@ export function WT_QGetMessage(sock: QSocket): number {
 	}
 
 	// Get next message
-	const msg = conn.pendingMessages.shift()!;
+	let msg = conn.pendingMessages.shift()!;
+
+	// For unreliable messages, skip to the most recent one.
+	// In original Quake, unreliable messages are overwritten by newer ones.
+	// The WebTransport datagram reader queues all datagrams, so if the client
+	// sends faster than the server reads, stale messages pile up.
+	// Discard stale unreliable messages but preserve any reliable messages.
+	if (!msg.reliable) {
+		while (conn.pendingMessages.length > 0) {
+			const next = conn.pendingMessages[0];
+			if (next.reliable) break; // Stop at next reliable message
+			conn.pendingMessages.shift();
+			msg = next; // Use newer unreliable message
+		}
+	}
 
 	// Copy to net_message
 	net_message.cursize = 0;

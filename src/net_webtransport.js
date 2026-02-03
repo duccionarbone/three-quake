@@ -1069,7 +1069,24 @@ export function WT_QGetMessage( sock ) {
 	}
 
 	// Get next message
-	const msg = conn.pendingMessages.shift();
+	let msg = conn.pendingMessages.shift();
+
+	// For unreliable messages, skip to the most recent one.
+	// In original Quake, unreliable messages are overwritten by newer ones.
+	// The WebTransport datagram reader queues all datagrams, so if the
+	// sender is faster than the reader, stale messages pile up.
+	if ( msg.reliable === false ) {
+
+		while ( conn.pendingMessages.length > 0 ) {
+
+			const next = conn.pendingMessages[ 0 ];
+			if ( next.reliable ) break; // Stop at next reliable message
+			conn.pendingMessages.shift();
+			msg = next; // Use newer unreliable message
+
+		}
+
+	}
 
 	// Copy to net_message
 	SZ_Clear( net_message );
