@@ -555,6 +555,19 @@ export function R_DrawEntitiesOnList() {
 
 const SHADEDOT_QUANT = 16;
 
+// Cached callbacks for viewmodel depthRange hack (no closures in render loop)
+function _viewmodelBeforeRender( r ) {
+
+	r.getContext().depthRange( 0, 0.3 );
+
+}
+
+function _viewmodelAfterRender( r ) {
+
+	r.getContext().depthRange( 0, 1 );
+
+}
+
 export function R_DrawViewModel() {
 
 	if ( ! r_drawviewmodel.value )
@@ -582,29 +595,29 @@ export function R_DrawViewModel() {
 	if ( ! currententity || ! currententity.model )
 		return;
 
-	// Use the standard R_DrawAliasModel which handles lighting and adds to scene
+	// Draw normally — stays in main scene with all lights
 	R_DrawAliasModel( currententity );
 
-	// Apply polygonOffset to prevent clipping through walls
-	// This pushes the weapon's depth values toward the camera
+	// Set up onBeforeRender/onAfterRender to apply depthRange hack
+	// This runs right when Three.js draws this mesh, so the GL state sticks
 	const mesh = currententity._aliasMesh;
-	if ( mesh && mesh.material ) {
+	if ( mesh ) {
 
-		// Need to clone material if it's shared, to avoid affecting other models
-		if ( ! mesh.material._isViewmodelMaterial ) {
+		// Clone material once and cache on entity — re-clone only if base material changes
+		const baseMaterial = mesh.material;
+		if ( ! currententity._viewmodelMaterial || currententity._viewmodelMaterialBase !== baseMaterial ) {
 
-			mesh.material = mesh.material.clone();
-			mesh.material._isViewmodelMaterial = true;
+			currententity._viewmodelMaterial = baseMaterial.clone();
+			currententity._viewmodelMaterial.transparent = true;
+			currententity._viewmodelMaterialBase = baseMaterial;
 
 		}
 
-		// Render weapon on top of everything - no depth testing
-		mesh.material.depthTest = false;
-		mesh.material.depthWrite = false;
-		mesh.material.transparent = true;
-
-		// Render last
+		mesh.material = currententity._viewmodelMaterial;
 		mesh.renderOrder = 999;
+
+		mesh.onBeforeRender = _viewmodelBeforeRender;
+		mesh.onAfterRender = _viewmodelAfterRender;
 
 	}
 
